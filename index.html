@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>보일 비트(Boyle Beat) - 기체 압력과 부피 리듬 시뮬레이션</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800;900&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: #090d16;
+            color: #f8fafc;
+            overflow-x: hidden;
+        }
+        .font-cyber {
+            font-family: 'Orbitron', 'Pretendard', sans-serif;
+        }
+        /* 네온 글로우 스타일 */
+        .neon-border-cyan {
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.35), inset 0 0 15px rgba(6, 182, 212, 0.15);
+            border: 1px solid rgba(6, 182, 212, 0.6);
+        }
+        .neon-border-pink {
+            box-shadow: 0 0 20px rgba(236, 72, 153, 0.45), inset 0 0 15px rgba(236, 72, 153, 0.2);
+            border: 2px solid rgba(236, 72, 153, 0.8);
+        }
+        .hit-btn {
+            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
+            box-shadow: 0 8px 0 #4c1d95, 0 0 25px rgba(236, 72, 153, 0.6);
+            transition: transform 0.05s ease, box-shadow 0.05s ease, filter 0.05s ease;
+        }
+        .hit-btn:active, .hit-btn.active-press {
+            transform: translateY(6px);
+            box-shadow: 0 2px 0 #4c1d95, 0 0 40px rgba(6, 182, 212, 0.9);
+            background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+        }
+        /* 커스텀 슬라이더 */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 10px;
+            cursor: pointer;
+            background: #1e293b;
+            border-radius: 5px;
+            border: 1px solid #334155;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: #06b6d4;
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -8px;
+            box-shadow: 0 0 12px #06b6d4;
+            border: 2px solid #ffffff;
+        }
+        @keyframes pulse-fast {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.06); }
+        }
+        .combo-bump {
+            animation: pulse-fast 0.15s ease-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between p-2 sm:p-4 max-w-6xl mx-auto">
+
+    <!-- 상단 헤더 & 모드 전환 -->
+    <header class="flex flex-col sm:flex-row items-center justify-between gap-2 pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 to-fuchsia-500 flex items-center justify-center shadow-lg shadow-cyan-500/30 font-cyber font-black text-xl text-slate-950">
+                B
+            </div>
+            <div>
+                <h1 class="text-lg sm:text-2xl font-black tracking-tight flex items-center gap-2">
+                    <span class="bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-sky-300 to-fuchsia-400">BOYLE BEAT</span>
+                    <span class="text-xs sm:text-sm bg-slate-800 text-cyan-300 px-2.5 py-0.5 rounded-full border border-cyan-500/30 font-semibold">보일 법칙 리듬 실험실</span>
+                </h1>
+                <p class="text-xs text-slate-400">타겟 입자가 <span class="text-cyan-400 font-bold">양쪽 네온 센서 벽</span>에 부딪히는 순간 타이밍 맞춰 터치하세요!</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <!-- 사운드 토글 -->
+            <button id="soundToggleBtn" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold flex items-center gap-1.5 text-cyan-300 transition">
+                <span id="soundIcon">🔊</span> <span id="soundText">비트음 ON</span>
+            </button>
+            <!-- 모드 탭 -->
+            <div class="flex bg-slate-900 p-1 rounded-xl border border-slate-800">
+                <button id="freeModeBtn" class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold bg-cyan-500 text-slate-950 shadow transition">
+                    🎛️ 자유 실험 모드
+                </button>
+                <button id="challengeModeBtn" class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold text-slate-400 hover:text-white transition">
+                    🔥 30초 압축 챌린지
+                </button>
+            </div>
+            <!-- 도움말 버튼 -->
+            <button id="helpBtn" class="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-300">
+                ❓ 원리
+            </button>
+        </div>
+    </header>
+
+    <!-- 과학 데이터 대시보드 (오개념 방지 핵심 계기판) -->
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 my-3">
+        <!-- 1. 부피 (V) -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 flex flex-col justify-between relative overflow-hidden">
+            <div class="flex justify-between items-center">
+                <span class="text-xs font-bold text-slate-400">실린더 부피 (V)</span>
+                <span id="volBadge" class="text-[11px] font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">기준 부피</span>
+            </div>
+            <div class="mt-1 flex items-baseline gap-1">
+                <span id="statVolume" class="text-2xl sm:text-3xl font-cyber font-black text-cyan-400">60</span>
+                <span class="text-xs sm:text-sm font-bold text-slate-400">mL</span>
+            </div>
+            <div class="w-full bg-slate-800 h-2 rounded-full mt-2 overflow-hidden">
+                <div id="volBar" class="bg-cyan-400 h-full transition-all duration-150" style="width: 100%"></div>
+            </div>
+        </div>
+
+        <!-- 2. 입자 이동 속력 (v - 온도 일정 강조!) -->
+        <div class="bg-slate-900/90 border-2 border-emerald-500/50 rounded-2xl p-3 flex flex-col justify-between relative overflow-hidden shadow-lg shadow-emerald-950/30">
+            <div class="flex justify-between items-center">
+                <span class="text-xs font-bold text-emerald-300 flex items-center gap-1">🌡️ 입자 빠르기 (온도)</span>
+                <span class="text-[10px] font-extrabold px-2 py-0.5 rounded bg-emerald-500 text-slate-950 animate-pulse">절대 불변!</span>
+            </div>
+            <div class="mt-1 flex items-baseline gap-1.5">
+                <span class="text-2xl sm:text-3xl font-cyber font-black text-emerald-400">300</span>
+                <span class="text-xs font-bold text-emerald-300/80">px/s (일정)</span>
+            </div>
+            <p class="text-[11px] text-emerald-200/80 mt-1 font-medium leading-tight">
+                ⚠️ 부피가 줄어도 <span class="underline font-bold text-white">입자 속력은 빨라지지 않음!</span>
+            </p>
+        </div>
+
+        <!-- 3. 충돌 박자 & 기체 압력 (P) -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 flex flex-col justify-between relative overflow-hidden">
+            <div class="flex justify-between items-center">
+                <span class="text-xs font-bold text-slate-400">충돌 박자 = 압력 (P)</span>
+                <span id="bpmBadge" class="text-[11px] font-cyber font-bold px-2 py-0.5 rounded bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40">60 BPM</span>
+            </div>
+            <div class="mt-1 flex items-baseline justify-between">
+                <div>
+                    <span id="statPressure" class="text-2xl sm:text-3xl font-cyber font-black text-fuchsia-400">1.0</span>
+                    <span class="text-xs sm:text-sm font-bold text-slate-400">기압 (atm)</span>
+                </div>
+                <span id="statFreq" class="text-xs text-fuchsia-300 font-bold">1.0회/초</span>
+            </div>
+            <div class="w-full bg-slate-800 h-2 rounded-full mt-2 overflow-hidden">
+                <div id="pressBar" class="bg-gradient-to-r from-fuchsia-500 to-amber-400 h-full transition-all duration-150" style="width: 25%"></div>
+            </div>
+        </div>
+
+        <!-- 4. 리듬 스코어 & 콤보 -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 flex flex-col justify-between relative overflow-hidden">
+            <div class="flex justify-between items-center">
+                <span class="text-xs font-bold text-slate-400">SCORE & COMBO</span>
+                <button id="resetScoreBtn" class="text-[11px] text-slate-400 hover:text-white underline">초기화</button>
+            </div>
+            <div class="mt-1 flex items-baseline justify-between">
+                <div>
+                    <span id="statScore" class="text-2xl sm:text-3xl font-cyber font-black text-amber-400">0</span>
+                    <span class="text-xs text-slate-400 font-bold">점</span>
+                </div>
+                <div class="text-right">
+                    <span id="statCombo" class="text-xl sm:text-2xl font-cyber font-black text-cyan-300">0</span>
+                    <span class="text-xs text-cyan-400 font-bold">COMBO</span>
+                </div>
+            </div>
+            <div class="flex justify-between text-[11px] text-slate-400 mt-1">
+                <span>정확도: <strong id="statAcc" class="text-white">100%</strong></span>
+                <span>최대 콤보: <strong id="statMaxCombo" class="text-amber-300">0</strong></span>
+            </div>
+        </div>
+    </section>
+
+    <!-- 챌린지 모드 진행 바 (챌린지 모드에서만 표시) -->
+    <div id="challengeBanner" class="hidden mb-3 bg-gradient-to-r from-fuchsia-950/80 via-slate-900 to-cyan-950/80 border border-fuchsia-500/50 rounded-2xl p-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+            <div class="flex items-center gap-2">
+                <span class="px-2.5 py-0.5 rounded-full bg-fuchsia-500 text-slate-950 font-black text-xs animate-pulse">LIVE CHALLENGE</span>
+                <span id="challengeStageText" class="text-sm font-extrabold text-white">Stage 1: 60 mL (1기압 - 여유로운 박자)</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="text-xs text-slate-300">남은 시간: <strong id="challengeTime" class="font-cyber text-lg text-amber-400">30.0</strong>초</span>
+                <button id="stopChallengeBtn" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-600 text-xs font-bold transition">중단</button>
+            </div>
+        </div>
+        <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+            <div id="challengeProgressBar" class="bg-gradient-to-r from-cyan-400 via-fuchsia-500 to-amber-400 h-full transition-all duration-100" style="width: 100%"></div>
+        </div>
+    </div>
+
+    <!-- 메인 캔버스 영역 (피스톤 & 리듬 판정 시각화) -->
+    <main class="relative flex-grow flex flex-col justify-center my-1">
+        <div id="canvasWrapper" class="relative w-full h-64 sm:h-80 md:h-96 bg-slate-950 rounded-3xl neon-border-cyan overflow-hidden">
+            <canvas id="simCanvas" class="w-full h-full block"></canvas>
+
+            <!-- 상단 오버레이 안내 배지 -->
+            <div class="absolute top-3 left-3 right-3 flex justify-between items-start pointer-events-none">
+                <div class="bg-slate-900/85 backdrop-blur px-3 py-1.5 rounded-xl border border-slate-700/80 flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-amber-400 shadow-[0_0_10px_#fbbf24] inline-block"></span>
+                    <span class="text-xs font-bold text-slate-200">타겟 입자 (일정 속력 왕복 운동)</span>
+                    <span class="text-slate-600">|</span>
+                    <span class="w-2.5 h-2.5 rounded-full bg-sky-400/50 inline-block"></span>
+                    <span class="text-xs text-slate-400 hidden sm:inline">배경 기체 입자들</span>
+                </div>
+
+                <!-- 1회 왕복 거리 표시 -->
+                <div class="bg-slate-900/85 backdrop-blur px-3 py-1.5 rounded-xl border border-cyan-500/40 text-right">
+                    <span class="text-[11px] text-slate-400 block">벽면 사이 이동 거리</span>
+                    <span id="statDistance" class="text-xs sm:text-sm font-cyber font-bold text-cyan-300">100% (기본 거리)</span>
+                </div>
+            </div>
+
+            <!-- 하단 박자 가이더 (타겟 입자 위치 게이지 & 판정 힌트) -->
+            <div class="absolute bottom-3 left-3 right-3 pointer-events-none flex justify-between items-center text-[11px] text-slate-400 px-2">
+                <span class="text-cyan-400 font-bold">⚡ 왼쪽 센서 (피스톤 벽)</span>
+                <span id="rhythmHintText" class="bg-slate-900/90 px-3 py-1 rounded-full border border-slate-700 text-slate-200 font-semibold">
+                    공이 양쪽 네온 벽에 닿는 순간 <strong class="text-fuchsia-400">HIT!</strong>
+                </span>
+                <span class="text-fuchsia-400 font-bold">오른쪽 센서 (실린더 끝) ⚡</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- 하단 컨트롤러: 부피 조절 패널 + 대형 리듬 터치 패드 -->
+    <section class="grid grid-cols-1 md:grid-cols-12 gap-3 mt-3 items-stretch">
+        <!-- 부피(피스톤) 조절부 (7칸) -->
+        <div id="volumeControlPanel" class="md:col-span-7 bg-slate-900/95 border border-slate-800 rounded-2xl p-3 sm:p-4 flex flex-col justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <div>
+                    <h2 class="text-sm sm:text-base font-extrabold text-white flex items-center gap-2">
+                        <span>🎚️ 피스톤 부피(V) 조절</span>
+                        <span class="text-xs font-normal text-cyan-400">(부피 감소 👉 이동 거리 단축 👉 박자 빨라짐!)</span>
+                    </h2>
+                </div>
+                <label class="flex items-center gap-1.5 text-xs font-bold text-slate-300 cursor-pointer bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+                    <input type="checkbox" id="vectorToggle" checked class="accent-cyan-400 rounded">
+                    <span>속력 화살표 표시</span>
+                </label>
+            </div>
+
+            <!-- 프리셋 버튼 3단계 (60mL, 30mL, 15mL) -->
+            <div class="grid grid-cols-3 gap-2 my-1.5">
+                <button data-vol="60" class="vol-preset-btn py-2.5 px-2 rounded-xl border-2 border-cyan-400 bg-cyan-500/20 text-white font-bold transition flex flex-col items-center">
+                    <span class="text-sm sm:text-base font-cyber font-black text-cyan-300">60 mL (1기압)</span>
+                    <span class="text-[11px] text-slate-300 mt-0.5">🐢 느린 비트 (1배속)</span>
+                </button>
+                <button data-vol="30" class="vol-preset-btn py-2.5 px-2 rounded-xl border border-slate-700 bg-slate-800/70 hover:bg-slate-800 text-slate-200 font-bold transition flex flex-col items-center">
+                    <span class="text-sm sm:text-base font-cyber font-black text-amber-300">30 mL (2기압)</span>
+                    <span class="text-[11px] text-slate-300 mt-0.5">🐇 2배 빠른 비트!</span>
+                </button>
+                <button data-vol="15" class="vol-preset-btn py-2.5 px-2 rounded-xl border border-slate-700 bg-slate-800/70 hover:bg-slate-800 text-slate-200 font-bold transition flex flex-col items-center">
+                    <span class="text-sm sm:text-base font-cyber font-black text-fuchsia-400">15 mL (4기압)</span>
+                    <span class="text-[11px] text-slate-300 mt-0.5">⚡ 4배 폭풍 연타!!</span>
+                </button>
+            </div>
+
+            <!-- 미세 부피 조절 슬라이더 -->
+            <div class="mt-2 flex items-center gap-3 bg-slate-950/70 px-3 py-2 rounded-xl border border-slate-800/80">
+                <span class="text-xs font-bold text-fuchsia-400 whitespace-nowrap">압축 (15mL)</span>
+                <input id="volumeSlider" type="range" min="15" max="60" step="1" value="60" class="w-full">
+                <span class="text-xs font-bold text-cyan-400 whitespace-nowrap">팽창 (60mL)</span>
+            </div>
+        </div>
+
+        <!-- 대형 리듬 HIT 버튼 패드 (5칸) -->
+        <div class="md:col-span-5 flex flex-col">
+            <button id="hitButton" class="hit-btn w-full h-full min-h-[110px] sm:min-h-[130px] rounded-2xl flex flex-col items-center justify-center p-4 text-white select-none cursor-pointer relative overflow-hidden">
+                <div class="flex items-center gap-2 pointer-events-none">
+                    <span class="text-2xl sm:text-3xl">🥁</span>
+                    <span class="text-2xl sm:text-3xl font-cyber font-black tracking-wider">HIT! (터치)</span>
+                </div>
+                <span class="text-xs sm:text-sm font-bold text-white/90 mt-1 pointer-events-none bg-black/25 px-3 py-0.5 rounded-full">
+                    PC: [스페이스바] / 태블릿·모바일: 버튼 터치!
+                </span>
+                <span id="lastJudgeSubtext" class="text-xs font-cyber font-bold text-cyan-200 mt-1.5 pointer-events-none h-4">
+                    양쪽 벽 충돌 순간에 맞춰 누르세요!
+                </span>
+            </button>
+        </div>
+    </section>
+
+    <!-- 모달 1: 30초 챌린지 결과 & 보일 법칙 리포트 -->
+    <div id="resultModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border-2 border-cyan-500 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative animate-fadeIn">
+            <div class="text-center">
+                <span class="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 text-xs font-bold border border-cyan-500/40">30초 압축 챌린지 완료!</span>
+                <h2 class="text-2xl sm:text-3xl font-black text-white mt-2">🎉 실험 & 리듬 리포트</h2>
+            </div>
+
+            <!-- 점수 요약 -->
+            <div class="grid grid-cols-3 gap-2 my-4 bg-slate-950 p-3.5 rounded-2xl border border-slate-800 text-center">
+                <div>
+                    <span class="text-xs text-slate-400 block">최종 점수</span>
+                    <span id="resScore" class="text-xl sm:text-2xl font-cyber font-black text-amber-400">0</span>
+                </div>
+                <div>
+                    <span class="text-xs text-slate-400 block">최대 콤보</span>
+                    <span id="resMaxCombo" class="text-xl sm:text-2xl font-cyber font-black text-cyan-400">0</span>
+                </div>
+                <div>
+                    <span class="text-xs text-slate-400 block">타이밍 정확도</span>
+                    <span id="resAcc" class="text-xl sm:text-2xl font-cyber font-black text-fuchsia-400">0%</span>
+                </div>
+            </div>
+
+            <div class="flex justify-around text-xs font-bold bg-slate-800/60 py-2 rounded-xl mb-4">
+                <span class="text-cyan-300">PERFECT: <strong id="resPerfect">0</strong></span>
+                <span class="text-emerald-400">GOOD: <strong id="resGood">0</strong></span>
+                <span class="text-rose-400">BAD/MISS: <strong id="resBad">0</strong></span>
+            </div>
+
+            <!-- 보일 법칙 핵심 정리 박스 -->
+            <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-cyan-500/40 rounded-2xl p-4 text-xs sm:text-sm space-y-2 text-slate-200 leading-relaxed">
+                <div class="font-extrabold text-cyan-300 text-sm flex items-center gap-1.5">
+                    <span>💡 방금 손끝으로 체험한 [보일 법칙]의 비밀!</span>
+                </div>
+                <p>1️⃣ <strong>입자의 빠르기(온도)는 그대로!</strong><br>
+                60mL일 때나 15mL일 때나 노란 타겟 입자의 이동 속력(<span class="text-emerald-400 font-bold">300 px/s</span>)은 전혀 변하지 않았습니다.</p>
+                <p>2️⃣ <strong>왜 박자(압력)가 2배, 4배 빨라졌을까?</strong><br>
+                피스톤이 내려와 <strong>부피(V)가 <span class="text-cyan-300">1/2, 1/4</span>로 줄어들면</strong>, 입자가 왕복하는 <strong>이동 거리가 짧아져서</strong> 벽에 부딪히는 <strong>충돌 횟수(압력 P)가 <span class="text-fuchsia-400">2배, 4배</span>로 증가</strong>하기 때문입니다!</p>
+                <div class="bg-slate-950/90 p-2.5 rounded-xl text-center font-bold text-amber-300 border border-amber-500/30 mt-2">
+                    부피 감소 (V ↓) ➔ 이동 거리 감소 ➔ 충돌 횟수 증가 (비트 ↑) ➔ 압력 증가 (P ↑)
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mt-5">
+                <button id="retryChallengeBtn" class="py-3 rounded-xl bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-slate-950 font-black text-sm hover:opacity-95 transition">
+                    🔥 다시 도전하기
+                </button>
+                <button id="closeResultBtn" class="py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm transition">
+                    🎛️ 자유 실험으로 돌아가기
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 모달 2: 과학 원리 & 게임 방법 안내 -->
+    <div id="helpModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 class="text-lg font-black text-cyan-400">🎵 보일 비트(Boyle Beat) 플레이 방법</h3>
+                <button id="closeHelpBtn" class="text-slate-400 hover:text-white text-xl font-bold">&times;</button>
+            </div>
+            <div class="text-xs sm:text-sm text-slate-300 space-y-3 leading-relaxed">
+                <p><strong class="text-amber-400">1. 타겟 입자 집중 관찰:</strong><br>
+                실린더 안의 수많은 기체 입자 중, 빛나는 <strong>노란색 타겟 입자</strong> 하나가 일정한 속력으로 양쪽 벽을 왕복합니다.</p>
+                <p><strong class="text-fuchsia-400">2. 벽 충돌 타이밍에 HIT!:</strong><br>
+                타겟 입자가 <strong>왼쪽 피스톤 센서 벽</strong>이나 <strong>오른쪽 실린더 끝 센서 벽</strong>에 부딪히는 정확한 순간에 <kbd class="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-600 text-white">Space</kbd> 또는 <strong>[HIT! 버튼]</strong>을 누르세요!</p>
+                <p><strong class="text-cyan-400">3. 부피를 줄이며 박자 변화 체감:</strong><br>
+                부피를 <strong>60mL ➔ 30mL ➔ 15mL</strong>로 줄여보세요. 입자의 이동 빠르기는 그대로인데 왜 손가락이 바빠지는지(충돌 횟수 증가 = 압력 증가) 직접 느껴보세요!</p>
+            </div>
+            <button id="confirmHelpBtn" class="w-full py-2.5 rounded-xl bg-cyan-500 text-slate-950 font-black text-sm">
+                확인했어요!
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * 보일 비트 (Boyle Beat) - 보일 법칙 리듬 액션 시뮬레이션
+         * - 일정한 속력(온도 일정)의 타겟 입자가 피스톤 벽과 실린더 바닥 벽을 왕복
+         * - 부피(V) 조절에 따라 왕복 거리가 달라져 벽면 충돌 주기(BPM/압력)가 반비례로 변화
+         */
+        window.onload = function () {
+            const canvas = document.getElementById('simCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // UI 참조
+            const statVolume = document.getElementById('statVolume');
+            const volBadge = document.getElementById('volBadge');
+            const volBar = document.getElementById('volBar');
+            const statPressure = document.getElementById('statPressure');
+            const statFreq = document.getElementById('statFreq');
+            const bpmBadge = document.getElementById('bpmBadge');
+            const pressBar = document.getElementById('pressBar');
+            const statDistance = document.getElementById('statDistance');
+
+            const statScore = document.getElementById('statScore');
+            const statCombo = document.getElementById('statCombo');
+            const statAcc = document.getElementById('statAcc');
+            const statMaxCombo = document.getElementById('statMaxCombo');
+            const lastJudgeSubtext = document.getElementById('lastJudgeSubtext');
+
+            const volumeSlider = document.getElementById('volumeSlider');
+            const presetBtns = document.querySelectorAll('.vol-preset-btn');
+            const vectorToggle = document.getElementById('vectorToggle');
+            const hitButton = document.getElementById('hitButton');
+
+            // 사운드 및 모드 참조
+            const soundToggleBtn = document.getElementById('soundToggleBtn');
+            const soundIcon = document.getElementById('soundIcon');
+            const soundText = document.getElementById('soundText');
+            const freeModeBtn = document.getElementById('freeModeBtn');
+            const challengeModeBtn = document.getElementById('challengeModeBtn');
+            const challengeBanner = document.getElementById('challengeBanner');
+            const challengeStageText = document.getElementById('challengeStageText');
+            const challengeTimeEl = document.getElementById('challengeTime');
+            const challengeProgressBar = document.getElementById('challengeProgressBar');
+            const volumeControlPanel = document.getElementById('volumeControlPanel');
+
+            // 모달 참조
+            const resultModal = document.getElementById('resultModal');
+            const helpModal = document.getElementById('helpModal');
+
+            // -------------------------------------------------------------
+            // 1. Web Audio API 신디사이저 (외부 음원 없이 아케이드 사운드 생성)
+            // -------------------------------------------------------------
+            let audioCtx = null;
+            let soundEnabled = true;
+
+            function initAudio() {
+                if (!audioCtx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    audioCtx = new AudioContext();
+                }
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+            }
+
+            // 벽 충돌 기본 비트음 (드럼 킥/스네어 틱)
+            function playWallBeatSound(side) {
+                if (!soundEnabled) return;
+                initAudio();
+                if (!audioCtx) return;
+
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                // 왼쪽 벽(피스톤)은 묵직한 킥(110Hz), 오른쪽 벽은 경쾌한 스네어 림(165Hz)
+                osc.type = 'triangle';
+                const startFreq = side === 'left' ? 130 : 185;
+                osc.frequency.setValueAtTime(startFreq, now);
+                osc.frequency.exponentialRampToValueAtTime(35, now + 0.08);
+
+                gain.gain.setValueAtTime(0.22, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.09);
+            }
+
+            // 유저 터치 판정 효과음 (PERFECT / GOOD / BAD)
+            function playJudgeSound(judge) {
+                if (!soundEnabled) return;
+                initAudio();
+                if (!audioCtx) return;
+
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                if (judge === 'PERFECT') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(587.33, now); // D5
+                    osc.frequency.setValueAtTime(880, now + 0.045); // A5
+                    gain.gain.setValueAtTime(0.35, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.17);
+                } else if (judge === 'GOOD') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(440, now); // A4
+                    osc.frequency.setValueAtTime(659.25, now + 0.05); // E5
+                    gain.gain.setValueAtTime(0.28, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.15);
+                } else {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(140, now);
+                    osc.frequency.linearRampToValueAtTime(95, now + 0.12);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.14);
+                }
+            }
+
+            // -------------------------------------------------------------
+            // 2. 시뮬레이션 물리 & 게임 상태 변수
+            // -------------------------------------------------------------
+            let currentVolume = 60;      // mL (15 ~ 60)
+            let displayVolume = 60;      // 부드러운 피스톤 애니메이션용
+            const PARTICLE_SPEED_DISPLAY = 300; // UI에 표시할 고정 속력(px/s)
+
+            // 60mL일 때 정확히 1초에 1번 충돌(60 BPM)하도록 캔버스 스케일에 맞춰 실제 속도 자동 보정
+            let chamberTop = 45;
+            let chamberBottom = 260;
+            let chamberRight = 700;
+            let chamberMaxWidth = 500;   // 60mL일 때의 내부 가로 길이
+            let leftWallX = 200;         // 현재 피스톤 오른쪽 면 X좌표
+
+            // 타겟 입자 (일정 속력으로 좌우 수평 왕복)
+            const targetParticle = {
+                x: 350,
+                y: 150,
+                radius: 13,
+                dir: 1, // 1: 오른쪽 이동, -1: 왼쪽 이동
+                trail: []
+            };
+
+            // 배경 공기 입자들 (20개, 등속 직선 운동)
+            const bgParticles = [];
+            const BG_COUNT = 22;
+
+            // 충돌 판정 타이밍 기록
+            let lastBounceTime = -9999;
+            let lastBounceProcessed = false; // 이미 이번 충돌에 대해 판정했는지 여부
+            let lastBounceSide = 'right';    // 'left' | 'right'
+
+            // 시각 이펙트 배열 (파동, 판정 텍스트, 벽면 플래시, 화면 쉐이크)
+            const ripples = [];
+            const floatingTexts = [];
+            let leftWallFlash = 0;
+            let rightWallFlash = 0;
+            let screenShake = 0;
+
+            // 스코어 상태
+            let score = 0;
+            let combo = 0;
+            let maxCombo = 0;
+            let countPerfect = 0;
+            let countGood = 0;
+            let countBad = 0;
+
+            // 모드 상태 ('free' | 'challenge')
+            let gameMode = 'free';
+            let challengeRemaining = 30.0;
+
+            // -------------------------------------------------------------
+            // 3. 캔버스 리사이즈 및 실린더 기하 구조 계산
+            // -------------------------------------------------------------
+            function resizeCanvas() {
+                const rect = canvas.parentElement.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+
+                chamberTop = Math.max(42, canvas.height * 0.16);
+                chamberBottom = canvas.height - Math.max(42, canvas.height * 0.16);
+                chamberRight = canvas.width - Math.max(36, canvas.width * 0.06);
+
+                // 왼쪽 피스톤 손잡이 여유 공간을 두고 60mL 최대 너비 설정
+                const minLeftMargin = Math.max(95, canvas.width * 0.16);
+                chamberMaxWidth = chamberRight - minLeftMargin;
+
+                updateChamberGeometry();
+                targetParticle.y = (chamberTop + chamberBottom) / 2;
+            }
+
+            function updateChamberGeometry() {
+                const ratio = displayVolume / 60; // 0.25 (15mL) ~ 1.0 (60mL)
+                const currentWidth = chamberMaxWidth * ratio;
+                leftWallX = chamberRight - currentWidth;
+
+                // 타겟 입자가 벽 밖으로 삐져나가지 않도록 보정
+                const minX = leftWallX + targetParticle.radius;
+                const maxX = chamberRight - targetParticle.radius;
+                if (targetParticle.x < minX) targetParticle.x = minX;
+                if (targetParticle.x > maxX) targetParticle.x = maxX;
+            }
+
+            // 배경 입자 초기화
+            function initBgParticles() {
+                bgParticles.length = 0;
+                for (let i = 0; i < BG_COUNT; i++) {
+                    const angle = (Math.random() * Math.PI * 2);
+                    // 배경 입자도 모두 동일한 속력 크기를 가짐 (온도 일정 표현)
+                    bgParticles.push({
+                        x: leftWallX + 20 + Math.random() * Math.max(40, (chamberRight - leftWallX - 40)),
+                        y: chamberTop + 20 + Math.random() * Math.max(40, (chamberBottom - chamberTop - 40)),
+                        vx: Math.cos(angle),
+                        vy: Math.sin(angle),
+                        radius: 5.5
+                    });
+                }
+            }
+
+            // -------------------------------------------------------------
+            // 4. 부피 변경 및 과학 대시보드 업데이트
+            // -------------------------------------------------------------
+            function setVolume(vol) {
+                currentVolume = Math.max(15, Math.min(60, Number(vol)));
+                volumeSlider.value = currentVolume;
+
+                // 보일 법칙 계산: P * V = 60 (60mL일 때 1.0기압)
+                const pressure = 60 / currentVolume;
+                const bpm = Math.round(60 * pressure);
+                const freq = pressure.toFixed(1);
+                const distRatio = Math.round((currentVolume / 60) * 100);
+
+                statVolume.textContent = currentVolume;
+                volBar.style.width = `${distRatio}%`;
+
+                if (currentVolume >= 50) {
+                    volBadge.textContent = '넓은 공간 (여유)';
+                    volBadge.className = 'text-[11px] font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30';
+                } else if (currentVolume >= 25) {
+                    volBadge.textContent = '1/2 압축 (빠름)';
+                    volBadge.className = 'text-[11px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30';
+                } else {
+                    volBadge.textContent = '1/4 고압축 (폭풍 연타!)';
+                    volBadge.className = 'text-[11px] font-bold px-2 py-0.5 rounded bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40 animate-pulse';
+                }
+
+                statPressure.textContent = pressure.toFixed(1);
+                statFreq.textContent = `초당 ${freq}회 충돌`;
+                bpmBadge.textContent = `${bpm} BPM`;
+                pressBar.style.width = `${Math.min(100, (pressure / 4) * 100)}%`;
+
+                statDistance.textContent = `${distRatio}% (${currentVolume === 60 ? '기본' : (currentVolume / 60).toFixed(2) + '배'} 거리)`;
+
+                // 프리셋 버튼 하이라이트 동기화
+                presetBtns.forEach(btn => {
+                    const bVol = Number(btn.getAttribute('data-vol'));
+                    if (bVol === currentVolume) {
+                        btn.classList.add('border-cyan-400', 'bg-cyan-500/20');
+                        btn.classList.remove('border-slate-700', 'bg-slate-800/70');
+                    } else {
+                        btn.classList.remove('border-cyan-400', 'bg-cyan-500/20');
+                        btn.classList.add('border-slate-700', 'bg-slate-800/70');
+                    }
+                });
+            }
+
+            // -------------------------------------------------------------
+            // 5. 리듬 판정 로직 (양쪽 센서 벽 충돌 시점 vs 유저 터치 시점)
+            // -------------------------------------------------------------
+            // 현재 타겟 입자의 실제 픽셀 속도 계산:
+            // 60mL일 때 편도 이동 시간이 정확히 1.0초(60 BPM)가 되도록 설정
+            function getTargetPixelSpeed() {
+                const fullTravelDist = Math.max(50, chamberMaxWidth - targetParticle.radius * 2);
+                return fullTravelDist / 1.0; // 60mL 기준 1초에 1번 벽 충돌
+            }
+
+            // 다음 벽 충돌까지 남은 시간(초) 계산
+            function getTimeUntilNextBounce() {
+                const speed = getTargetPixelSpeed();
+                const minX = leftWallX + targetParticle.radius;
+                const maxX = chamberRight - targetParticle.radius;
+                const distRemaining = targetParticle.dir > 0
+                    ? Math.max(0, maxX - targetParticle.x)
+                    : Math.max(0, targetParticle.x - minX);
+                return distRemaining / speed;
+            }
+
+            function triggerUserHit() {
+                initAudio();
+
+                // 버튼 눌림 시각 효과
+                hitButton.classList.add('active-press');
+                setTimeout(() => hitButton.classList.remove('active-press'), 90);
+
+                const now = performance.now() / 1000;
+                const timeSinceLast = (!lastBounceProcessed) ? (now - lastBounceTime) : 999;
+                const timeUntilNext = getTimeUntilNextBounce();
+
+                // 가장 가까운 충돌(직전 충돌 vs 직후 예정 충돌)과의 시간 오차(초)
+                const errorSec = Math.min(timeSinceLast, timeUntilNext);
+
+                // 부피가 작아도 일정한 절대 시간 여유(또는 거리 여유)를 부여하여 쾌적한 판정 제공
+                const PERFECT_WINDOW = 0.085; // ±85ms
+                const GOOD_WINDOW = 0.165;    // ±165ms
+
+                let judge = 'BAD';
+                if (errorSec <= PERFECT_WINDOW) {
+                    judge = 'PERFECT';
+                } else if (errorSec <= GOOD_WINDOW) {
+                    judge = 'GOOD';
+                }
+
+                // 직전 충돌에 의한 판정이었다면 중복 판정 방지 처리
+                if (timeSinceLast <= timeUntilNext) {
+                    lastBounceProcessed = true;
+                } else if (judge !== 'BAD') {
+                    // 아주 살짝 일찍(Pre-hit) 눌러서 성공한 경우, 곧 일어날 충돌에서 중복 판정 방지 플래그 예약
+                    targetParticle.preHitConsumed = true;
+                }
+
+                // 판정 발생 위치 (왼쪽 벽 근처인지 오른쪽 벽 근처인지)
+                const isNearRight = (targetParticle.x > (leftWallX + chamberRight) / 2);
+                const effectX = isNearRight ? chamberRight - 20 : leftWallX + 20;
+                const effectY = targetParticle.y;
+
+                applyJudgeResult(judge, effectX, effectY);
+            }
+
+            function applyJudgeResult(judge, x, y) {
+                playJudgeSound(judge);
+
+                if (judge === 'PERFECT') {
+                    score += 100 + (combo * 5);
+                    combo++;
+                    countPerfect++;
+                    spawnFloatingText('PERFECT! +100', x, y - 28, '#22d3ee', 26);
+                    spawnRipple(x, y, '#22d3ee', 65);
+                    screenShake = 6;
+                    lastJudgeSubtext.textContent = `⚡ PERFECT! 정확한 충돌 타이밍! (${combo} COMBO)`;
+                    lastJudgeSubtext.className = 'text-xs font-cyber font-bold text-cyan-300 mt-1.5 pointer-events-none h-4';
+                } else if (judge === 'GOOD') {
+                    score += 50 + (combo * 2);
+                    combo++;
+                    countGood++;
+                    spawnFloatingText('GOOD! +50', x, y - 28, '#34d399', 22);
+                    spawnRipple(x, y, '#34d399', 48);
+                    screenShake = 3;
+                    lastJudgeSubtext.textContent = `👍 GOOD! 조금만 더 벽에 닿을 때 눌러보세요!`;
+                    lastJudgeSubtext.className = 'text-xs font-cyber font-bold text-emerald-300 mt-1.5 pointer-events-none h-4';
+                } else {
+                    combo = 0;
+                    countBad++;
+                    spawnFloatingText('BAD (타이밍 오차)', targetParticle.x, targetParticle.y - 25, '#fb7185', 18);
+                    lastJudgeSubtext.textContent = `❌ 공이 양쪽 네온 벽에 부딪히는 순간에 누르세요!`;
+                    lastJudgeSubtext.className = 'text-xs font-cyber font-bold text-rose-300 mt-1.5 pointer-events-none h-4';
+                }
+
+                if (combo > maxCombo) maxCombo = combo;
+                updateScoreDashboard();
+            }
+
+            function updateScoreDashboard() {
+                statScore.textContent = score.toLocaleString();
+                statCombo.textContent = combo;
+                statMaxCombo.textContent = maxCombo;
+
+                // 콤보 애니메이션
+                statCombo.classList.remove('combo-bump');
+                void statCombo.offsetWidth;
+                statCombo.classList.add('combo-bump');
+
+                const total = countPerfect + countGood + countBad;
+                const acc = total === 0 ? 100 : Math.round(((countPerfect * 1 + countGood * 0.7) / total) * 100);
+                statAcc.textContent = `${acc}%`;
+            }
+
+            function spawnRipple(x, y, color, maxR) {
+                ripples.push({ x, y, r: 10, maxR, alpha: 1.0, color });
+            }
+
+            function spawnFloatingText(text, x, y, color, size = 22) {
+                // 텍스트가 화면 밖으로 나가지 않도록 클램핑
+                const safeX = Math.max(90, Math.min(canvas.width - 90, x));
+                floatingTexts.push({ text, x: safeX, y, vy: -50, alpha: 1.0, color, size });
+            }
+
+            // -------------------------------------------------------------
+            // 6. 30초 압축 챌린지 모드 관리
+            // -------------------------------------------------------------
+            function startChallengeMode() {
+                gameMode = 'challenge';
+                challengeRemaining = 30.0;
+
+                // 점수 리셋
+                score = 0;
+                combo = 0;
+                maxCombo = 0;
+                countPerfect = 0;
+                countGood = 0;
+                countBad = 0;
+                updateScoreDashboard();
+
+                // UI 전환
+                freeModeBtn.className = 'px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold text-slate-400 hover:text-white transition';
+                challengeModeBtn.className = 'px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold bg-fuchsia-500 text-slate-950 shadow transition';
+                challengeBanner.classList.remove('hidden');
+                volumeControlPanel.classList.add('opacity-50', 'pointer-events-none');
+
+                setVolume(60);
+            }
+
+            function stopChallengeToFreeMode() {
+                gameMode = 'free';
+                freeModeBtn.className = 'px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold bg-cyan-500 text-slate-950 shadow transition';
+                challengeModeBtn.className = 'px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold text-slate-400 hover:text-white transition';
+                challengeBanner.classList.add('hidden');
+                volumeControlPanel.classList.remove('opacity-50', 'pointer-events-none');
+            }
+
+            function finishChallenge() {
+                stopChallengeToFreeMode();
+                // 결과 모달 데이터 채우기
+                document.getElementById('resScore').textContent = score.toLocaleString();
+                document.getElementById('resMaxCombo').textContent = maxCombo;
+                const total = countPerfect + countGood + countBad;
+                const acc = total === 0 ? 100 : Math.round(((countPerfect * 1 + countGood * 0.7) / total) * 100);
+                document.getElementById('resAcc').textContent = `${acc}%`;
+                document.getElementById('resPerfect').textContent = countPerfect;
+                document.getElementById('resGood').textContent = countGood;
+                document.getElementById('resBad').textContent = countBad;
+
+                resultModal.classList.remove('hidden');
+                resultModal.classList.add('flex');
+            }
+
+            // -------------------------------------------------------------
+            // 7. 메인 물리 업데이트 & 렌더링 루프
+            // -------------------------------------------------------------
+            let lastFrameTime = performance.now();
+
+            function animate(nowMs) {
+                const dt = Math.min(0.05, (nowMs - lastFrameTime) / 1000);
+                lastFrameTime = nowMs;
+
+                updatePhysics(dt, nowMs / 1000);
+                renderScene();
+
+                requestAnimationFrame(animate);
+            }
+
+            function updatePhysics(dt, nowSec) {
+                // 챌린지 모드 타이머 및 자동 부피 압축 (60mL -> 30mL -> 15mL)
+                if (gameMode === 'challenge') {
+                    challengeRemaining -= dt;
+                    if (challengeRemaining <= 0) {
+                        challengeRemaining = 0;
+                        finishChallenge();
+                        return;
+                    }
+                    challengeTimeEl.textContent = challengeRemaining.toFixed(1);
+                    challengeProgressBar.style.width = `${(challengeRemaining / 30) * 100}%`;
+
+                    if (challengeRemaining > 20) {
+                        if (currentVolume !== 60) setVolume(60);
+                        challengeStageText.textContent = 'Stage 1 (0~10초): 부피 60 mL (1기압 - 1배속 기본 박자)';
+                    } else if (challengeRemaining > 10) {
+                        if (currentVolume !== 30) {
+                            setVolume(30);
+                            spawnFloatingText('⚠️ 부피 1/2 압축! 박자 2배!', canvas.width / 2, chamberTop + 30, '#fbbf24', 22);
+                        }
+                        challengeStageText.textContent = 'Stage 2 (10~20초): 부피 30 mL (2기압 - 이동 거리 1/2, 박자 2배!)';
+                    } else {
+                        if (currentVolume !== 15) {
+                            setVolume(15);
+                            spawnFloatingText('🔥 부피 1/4 고압축! 박자 4배 폭풍 연타!!', canvas.width / 2, chamberTop + 30, '#ec4899', 22);
+                        }
+                        challengeStageText.textContent = 'Stage 3 (20~30초): 부피 15 mL (4기압 - 이동 거리 1/4, 박자 4배!)';
+                    }
+                }
+
+                // 피스톤 위치 부드러운 보간
+                displayVolume += (currentVolume - displayVolume) * Math.min(1, dt * 12);
+                updateChamberGeometry();
+
+                const speed = getTargetPixelSpeed();
+                const bgSpeed = speed * 0.65;
+
+                // 1) 배경 공기 입자 등속 운동 및 벽면 반사
+                for (let p of bgParticles) {
+                    p.x += p.vx * bgSpeed * dt;
+                    p.y += p.vy * bgSpeed * dt;
+
+                    if (p.x - p.radius < leftWallX) {
+                        p.x = leftWallX + p.radius;
+                        p.vx = Math.abs(p.vx);
+                    } else if (p.x + p.radius > chamberRight) {
+                        p.x = chamberRight - p.radius;
+                        p.vx = -Math.abs(p.vx);
+                    }
+
+                    if (p.y - p.radius < chamberTop) {
+                        p.y = chamberTop + p.radius;
+                        p.vy = Math.abs(p.vy);
+                    } else if (p.y + p.radius > chamberBottom) {
+                        p.y = chamberBottom - p.radius;
+                        p.vy = -Math.abs(p.vy);
+                    }
+                }
+
+                // 2) 타겟 공기 입자 등속 직선 왕복 운동 (속력 절대 일정!)
+                targetParticle.x += targetParticle.dir * speed * dt;
+
+                // 잔상(Trail) 기록
+                targetParticle.trail.push({ x: targetParticle.x, y: targetParticle.y });
+                if (targetParticle.trail.length > 14) {
+                    targetParticle.trail.shift();
+                }
+
+                const minX = leftWallX + targetParticle.radius;
+                const maxX = chamberRight - targetParticle.radius;
+
+                // 오른쪽 센서 벽 충돌 감지
+                if (targetParticle.x >= maxX && targetParticle.dir > 0) {
+                    targetParticle.x = maxX;
+                    targetParticle.dir = -1;
+                    onTargetBounce('right', chamberRight, targetParticle.y, nowSec);
+                }
+                // 왼쪽 피스톤 센서 벽 충돌 감지
+                else if (targetParticle.x <= minX && targetParticle.dir < 0) {
+                    targetParticle.x = minX;
+                    targetParticle.dir = 1;
+                    onTargetBounce('left', leftWallX, targetParticle.y, nowSec);
+                }
+
+                // 챌린지 모드에서 충돌 후 일정 시간(170ms) 동안 안 누르면 자동 MISS 처리
+                if (gameMode === 'challenge' && !lastBounceProcessed && (nowSec - lastBounceTime > 0.175)) {
+                    lastBounceProcessed = true;
+                    combo = 0;
+                    countBad++;
+                    const missX = lastBounceSide === 'right' ? chamberRight - 25 : leftWallX + 25;
+                    spawnFloatingText('MISS!', missX, targetParticle.y + 28, '#94a3b8', 16);
+                    updateScoreDashboard();
+                }
+
+                // 이펙트 감쇠 업데이트
+                leftWallFlash = Math.max(0, leftWallFlash - dt * 4.5);
+                rightWallFlash = Math.max(0, rightWallFlash - dt * 4.5);
+                screenShake = Math.max(0, screenShake - dt * 30);
+
+                for (let i = ripples.length - 1; i >= 0; i--) {
+                    const rp = ripples[i];
+                    rp.r += dt * 180;
+                    rp.alpha -= dt * 2.4;
+                    if (rp.alpha <= 0) ripples.splice(i, 1);
+                }
+
+                for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                    const ft = floatingTexts[i];
+                    ft.y += ft.vy * dt;
+                    ft.alpha -= dt * 1.4;
+                    if (ft.alpha <= 0) floatingTexts.splice(i, 1);
+                }
+            }
+
+            // 타겟 입자가 양쪽 벽에 부딪히는 순간 호출
+            function onTargetBounce(side, wallX, wallY, nowSec) {
+                playWallBeatSound(side);
+
+                if (side === 'left') {
+                    leftWallFlash = 1.0;
+                    spawnRipple(wallX, wallY, '#06b6d4', 42);
+                } else {
+                    rightWallFlash = 1.0;
+                    spawnRipple(wallX, wallY, '#ec4899', 42);
+                }
+
+                lastBounceTime = nowSec;
+                lastBounceSide = side;
+
+                // 만약 유저가 충돌 직전에 살짝 먼저 눌러서(Pre-hit) 이미 판정을 받은 상태라면 통과
+                if (targetParticle.preHitConsumed) {
+                    lastBounceProcessed = true;
+                    targetParticle.preHitConsumed = false;
+                } else {
+                    lastBounceProcessed = false;
+                }
+            }
+
+            // -------------------------------------------------------------
+            // 8. 캔버스 렌더링 (실린더, 피스톤, 네온 판정 벽, 타겟 입자, 눈금)
+            // -------------------------------------------------------------
+            function renderScene() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                ctx.save();
+                // 화면 쉐이크 적용
+                if (screenShake > 0.2) {
+                    const dx = (Math.random() - 0.5) * screenShake;
+                    const dy = (Math.random() - 0.5) * screenShake;
+                    ctx.translate(dx, dy);
+                }
+
+                // 1) 실린더 내부 배경 그리드 & 부피 눈금(15mL, 30mL, 45mL, 60mL)
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(leftWallX, chamberTop, chamberRight - leftWallX, chamberBottom - chamberTop);
+
+                const marks = [15, 30, 45, 60];
+                ctx.textAlign = 'center';
+                ctx.font = 'bold 11px Orbitron, Pretendard';
+
+                for (let m of marks) {
+                    const markX = chamberRight - (chamberMaxWidth * (m / 60));
+                    ctx.strokeStyle = (m === currentVolume) ? 'rgba(34, 211, 238, 0.55)' : 'rgba(148, 163, 184, 0.18)';
+                    ctx.lineWidth = (m === currentVolume) ? 2 : 1;
+                    ctx.setLineDash([4, 4]);
+                    ctx.beginPath();
+                    ctx.moveTo(markX, chamberTop);
+                    ctx.lineTo(markX, chamberBottom);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    // 눈금 텍스트
+                    ctx.fillStyle = (m === currentVolume) ? '#22d3ee' : '#64748b';
+                    ctx.fillText(`${m}mL`, markX, chamberBottom + 18);
+                }
+
+                // 2) 피스톤 로드(왼쪽 손잡이) 및 피스톤 헤드 그리기
+                const pistonHeadWidth = 22;
+                const pistonHeadLeft = leftWallX - pistonHeadWidth;
+
+                // 피스톤 축(Rod)
+                const rodHeight = 28;
+                const centerY = (chamberTop + chamberBottom) / 2;
+                const rodGrad = ctx.createLinearGradient(0, centerY - rodHeight / 2, 0, centerY + rodHeight / 2);
+                rodGrad.addColorStop(0, '#334155');
+                rodGrad.addColorStop(0.5, '#94a3b8');
+                rodGrad.addColorStop(1, '#1e293b');
+                ctx.fillStyle = rodGrad;
+                ctx.fillRect(0, centerY - rodHeight / 2, pistonHeadLeft, rodHeight);
+
+                // 피스톤 헤드
+                const headGrad = ctx.createLinearGradient(pistonHeadLeft, 0, leftWallX, 0);
+                headGrad.addColorStop(0, '#1e293b');
+                headGrad.addColorStop(1, '#06b6d4');
+                ctx.fillStyle = headGrad;
+                ctx.fillRect(pistonHeadLeft, chamberTop + 2, pistonHeadWidth, chamberBottom - chamberTop - 4);
+
+                // 3) 실린더 상·하단 외벽
+                ctx.strokeStyle = '#475569';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(chamberRight - chamberMaxWidth - 25, chamberTop);
+                ctx.lineTo(chamberRight + 4, chamberTop);
+                ctx.moveTo(chamberRight - chamberMaxWidth - 25, chamberBottom);
+                ctx.lineTo(chamberRight + 4, chamberBottom);
+                ctx.stroke();
+
+                // 4) 양쪽 리듬 판정 센서 벽 (왼쪽: 네온 시안, 오른쪽: 네온 마젠타)
+                // 왼쪽 센서 벽 (피스톤 면)
+                ctx.save();
+                ctx.strokeStyle = '#06b6d4';
+                ctx.lineWidth = 5 + leftWallFlash * 6;
+                ctx.shadowColor = '#06b6d4';
+                ctx.shadowBlur = 15 + leftWallFlash * 25;
+                ctx.beginPath();
+                ctx.moveTo(leftWallX, chamberTop + 2);
+                ctx.lineTo(leftWallX, chamberBottom - 2);
+                ctx.stroke();
+                ctx.restore();
+
+                // 오른쪽 센서 벽 (실린더 바닥 면)
+                ctx.save();
+                ctx.strokeStyle = '#ec4899';
+                ctx.lineWidth = 5 + rightWallFlash * 6;
+                ctx.shadowColor = '#ec4899';
+                ctx.shadowBlur = 15 + rightWallFlash * 25;
+                ctx.beginPath();
+                ctx.moveTo(chamberRight, chamberTop + 2);
+                ctx.lineTo(chamberRight, chamberBottom - 2);
+                ctx.stroke();
+                ctx.restore();
+
+                // 5) 배경 공기 입자들 렌더링
+                for (let p of bgParticles) {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
+                    ctx.fill();
+
+                    if (vectorToggle.checked) {
+                        ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+                        ctx.lineWidth = 1.5;
+                        ctx.beginPath();
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(p.x + p.vx * 14, p.y + p.vy * 14);
+                        ctx.stroke();
+                    }
+                }
+
+                // 6) 타겟 입자 가이드 레일 (중앙 점선)
+                ctx.strokeStyle = 'rgba(251, 191, 36, 0.18)';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([6, 6]);
+                ctx.beginPath();
+                ctx.moveTo(leftWallX, targetParticle.y);
+                ctx.lineTo(chamberRight, targetParticle.y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // 7) 타겟 입자 잔상(Trail)
+                for (let i = 0; i < targetParticle.trail.length; i++) {
+                    const pos = targetParticle.trail[i];
+                    const ratio = (i + 1) / targetParticle.trail.length;
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, targetParticle.radius * ratio * 0.85, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(251, 191, 36, ${ratio * 0.28})`;
+                    ctx.fill();
+                }
+
+                // 8) 타겟 입자 본체 & 일정 속력 벡터 화살표
+                if (vectorToggle.checked) {
+                    const arrowLen = 38; // 속력이 일정하므로 화살표 길이도 절대 변하지 않음!
+                    const startX = targetParticle.x;
+                    const endX = targetParticle.x + targetParticle.dir * arrowLen;
+                    const y = targetParticle.y;
+
+                    ctx.save();
+                    ctx.strokeStyle = '#10b981';
+                    ctx.fillStyle = '#10b981';
+                    ctx.lineWidth = 3.5;
+                    ctx.beginPath();
+                    ctx.moveTo(startX, y);
+                    ctx.lineTo(endX, y);
+                    ctx.stroke();
+
+                    // 화살촉
+                    ctx.beginPath();
+                    ctx.moveTo(endX, y);
+                    ctx.lineTo(endX - targetParticle.dir * 9, y - 6);
+                    ctx.lineTo(endX - targetParticle.dir * 9, y + 6);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    // 입자 위 속력 고정 배지
+                    ctx.font = 'bold 11px Pretendard';
+                    ctx.fillStyle = '#6ee7b7';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`속력 ${PARTICLE_SPEED_DISPLAY} px/s (일정)`, targetParticle.x, y - 22);
+                    ctx.restore();
+                }
+
+                // 타겟 입자 원형 글로우
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(targetParticle.x, targetParticle.y, targetParticle.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#fbbf24';
+                ctx.shadowColor = '#f59e0b';
+                ctx.shadowBlur = 20;
+                ctx.fill();
+                ctx.lineWidth = 2.5;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+                ctx.restore();
+
+                // 9) 파동(Ripple) 이펙트 렌더링
+                for (let rp of ripples) {
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
+                    ctx.strokeStyle = rp.color;
+                    ctx.globalAlpha = Math.max(0, rp.alpha);
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                // 10) 판정 팝업 텍스트(PERFECT / GOOD / BAD) 렌더링
+                for (let ft of floatingTexts) {
+                    ctx.save();
+                    ctx.font = `900 ${ft.size}px Orbitron, Pretendard`;
+                    ctx.fillStyle = ft.color;
+                    ctx.globalAlpha = Math.max(0, ft.alpha);
+                    ctx.textAlign = 'center';
+                    ctx.shadowColor = '#000000';
+                    ctx.shadowBlur = 8;
+                    ctx.fillText(ft.text, ft.x, ft.y);
+                    ctx.restore();
+                }
+
+                ctx.restore();
+            }
+
+            // -------------------------------------------------------------
+            // 9. 이벤트 리스너 바인딩 (터치, 클릭, 키보드, 슬라이더)
+            // -------------------------------------------------------------
+            // 모바일/태블릿 즉각 반응을 위해 pointerdown 사용
+            hitButton.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                triggerUserHit();
+            });
+
+            // 캔버스를 직접 터치해도 HIT 동작하도록 지원
+            canvas.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                triggerUserHit();
+            });
+
+            // 키보드 스페이스바 지원 (길게 누름 중복 방지)
+            window.addEventListener('keydown', (e) => {
+                if (e.code === 'Space' && !e.repeat) {
+                    e.preventDefault();
+                    triggerUserHit();
+                }
+            });
+
+            // 부피 슬라이더 조작
+            volumeSlider.addEventListener('input', (e) => {
+                if (gameMode === 'free') {
+                    setVolume(e.target.value);
+                }
+            });
+
+            // 부피 프리셋 버튼 (60mL, 30mL, 15mL)
+            presetBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (gameMode === 'free') {
+                        const targetVol = Number(btn.getAttribute('data-vol'));
+                        setVolume(targetVol);
+                    }
+                });
+            });
+
+            // 사운드 ON/OFF
+            soundToggleBtn.addEventListener('click', () => {
+                soundEnabled = !soundEnabled;
+                soundIcon.textContent = soundEnabled ? '🔊' : '🔇';
+                soundText.textContent = soundEnabled ? '비트음 ON' : '비트음 OFF';
+                soundToggleBtn.classList.toggle('text-cyan-300', soundEnabled);
+                soundToggleBtn.classList.toggle('text-slate-500', !soundEnabled);
+            });
+
+            // 점수 초기화
+            document.getElementById('resetScoreBtn').addEventListener('click', () => {
+                score = 0;
+                combo = 0;
+                maxCombo = 0;
+                countPerfect = 0;
+                countGood = 0;
+                countBad = 0;
+                updateScoreDashboard();
+            });
+
+            // 모드 전환 버튼
+            freeModeBtn.addEventListener('click', () => {
+                stopChallengeToFreeMode();
+            });
+            challengeModeBtn.addEventListener('click', () => {
+                startChallengeMode();
+            });
+            document.getElementById('stopChallengeBtn').addEventListener('click', () => {
+                stopChallengeToFreeMode();
+            });
+
+            // 모달 제어
+            document.getElementById('retryChallengeBtn').addEventListener('click', () => {
+                resultModal.classList.add('hidden');
+                resultModal.classList.remove('flex');
+                startChallengeMode();
+            });
+            document.getElementById('closeResultBtn').addEventListener('click', () => {
+                resultModal.classList.add('hidden');
+                resultModal.classList.remove('flex');
+                stopChallengeToFreeMode();
+            });
+
+            document.getElementById('helpBtn').addEventListener('click', () => {
+                helpModal.classList.remove('hidden');
+                helpModal.classList.add('flex');
+            });
+            document.getElementById('closeHelpBtn').addEventListener('click', () => {
+                helpModal.classList.add('hidden');
+                helpModal.classList.remove('flex');
+            });
+            document.getElementById('confirmHelpBtn').addEventListener('click', () => {
+                helpModal.classList.add('hidden');
+                helpModal.classList.remove('flex');
+            });
+
+            window.addEventListener('resize', resizeCanvas);
+
+            // 초기 실행
+            resizeCanvas();
+            initBgParticles();
+            setVolume(60);
+            requestAnimationFrame(animate);
+        };
+    </script>
+</body>
+</html>
